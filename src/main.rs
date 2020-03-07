@@ -1,8 +1,8 @@
 use std::time::{Duration, Instant};
 
 use notify_rust::Notification;
-use signal::Signal;
 use signal::trap::Trap;
+use signal::Signal;
 
 const POMODORO_TIME: u64 = 25 * 60;
 const SHORT_BREAK_TIME: u64 = 5 * 60;
@@ -105,8 +105,11 @@ impl Timer {
   }
 
   fn toggle(&mut self) {
-    if !self.running { self.start(); }
-    else { self.stop(); }
+    if !self.running {
+      self.start();
+    } else {
+      self.stop();
+    }
   }
 
   fn begin_next_state(&mut self) {
@@ -120,15 +123,24 @@ impl Timer {
         self.begin_next_state();
         Notification::new()
           .summary("pomod: time is up")
-          .body(format!("next up: {}", match self.state {
-            TimerState::None => "none? how did this happen?",
-            TimerState::Pomodoro => "pomodoro",
-            TimerState::ShortBreak => "short break",
-            TimerState::LongBreak => "long break",
-          }).as_str())
-          .show().unwrap();
+          .body(
+            format!(
+              "next up: {}",
+              match self.state {
+                TimerState::None => "none? how did this happen?",
+                TimerState::Pomodoro => "pomodoro",
+                TimerState::ShortBreak => "short break",
+                TimerState::LongBreak => "long break",
+              }
+            )
+            .as_str(),
+          )
+          .show()
+          .unwrap();
       } else {
-        self.remaining_time = self.remaining_time.unwrap()
+        self.remaining_time = self
+          .remaining_time
+          .unwrap()
           .checked_sub(Instant::now() - self.last_poll);
       }
     }
@@ -155,11 +167,14 @@ fn main() {
     let mut state_string = String::new();
     let remaining_time = timer.remaining_time.unwrap_or(Duration::new(0, 0));
     state_string.push_str(&timer.state.pomicon());
-    state_string.push_str(format!(
-      " {:02}:{:02}",
-      minutes(&remaining_time),
-      seconds(&remaining_time),
-    ).as_str());
+    state_string.push_str(
+      format!(
+        " {:02}:{:02}",
+        minutes(&remaining_time),
+        seconds(&remaining_time),
+      )
+      .as_str(),
+    );
     println!("{}", state_string);
   }
 }
