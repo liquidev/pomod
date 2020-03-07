@@ -7,11 +7,6 @@ import std/strformat
 import std/tables
 import std/times
 
-import dbus
-import rapid/audio/device
-import rapid/audio/samplers/wave
-
-
 # edit to configure
 
 const
@@ -121,6 +116,12 @@ proc poll(timer: var Timer) =
 
 when isMainModule:
 
+  import std/os
+
+  import dbus
+  import rapid/audio/device
+  import rapid/audio/samplers/wave
+
   # common
 
   proc notification(appName, summary, body: string,
@@ -144,6 +145,24 @@ when isMainModule:
     message.append(timeout.int32)
     bus.sendMessage(message)
 
+  proc configDir(): string =
+    result = getConfigDir()/"pomod"
+
+  if not dirExists(configDir()):
+    stderr.writeLine("config dir does not exist, creating at " & configDir())
+    createDir(configDir())
+
+  if not fileExists(configDir()/"sound.ogg"):
+    stderr.writeLine("default sound does not exist, creating")
+    const soundOgg = slurp("sound.ogg")
+    writeFile(configDir()/"sound.ogg", soundOgg)
+
+  var
+    audioDevice = newRAudioDevice()
+    sound = newRWave(configDir()/"sound.ogg")
+  audioDevice.attach(sound)
+  audioDevice.start()
+
   # the timer
 
   proc reset(timer: var Timer) =
@@ -153,7 +172,10 @@ when isMainModule:
       notification(appName = "pomod", summary = "pomod: time's up",
                    body = "next up: " & $newState, hints = {
                      "urgency": newVariant(2'u8)
-                   }.toTable)
+                   }.toTable, timeout = 5000)
+      # also, play a nice (user-definable) sound
+      sound.stop()
+      sound.play()
 
 
   var timer: Timer
@@ -171,7 +193,7 @@ when isMainModule:
       var
         signals: SigSet
         info: SigInfo
-        timespec = Timespec(tv_nsec: 500 * 1_000_000)
+        timespec = Timespec(tv_nsec: 250 * 1_000_000)
       discard sigemptyset(signals)
       discard sigaddset(signals, SIGUSR1)
       discard sigaddset(signals, SIGUSR2)
