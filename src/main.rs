@@ -1,6 +1,8 @@
+use std::io::Cursor;
 use std::time::{Duration, Instant};
 
-use notify_rust::Notification;
+use notify_rust::{Notification, Urgency};
+use rodio::Decoder;
 use signal::trap::Trap;
 use signal::Signal;
 
@@ -18,7 +20,7 @@ enum TimerState {
 }
 
 impl TimerState {
-  fn time(&self) -> Duration {
+  fn time(self) -> Duration {
     use TimerState::*;
 
     let seconds = match self {
@@ -30,7 +32,7 @@ impl TimerState {
     Duration::new(seconds, 0)
   }
 
-  fn pomicon(&self) -> String {
+  fn pomicon(self) -> String {
     use TimerState::*;
 
     String::from(match self {
@@ -66,6 +68,7 @@ struct Timer {
   remaining_time: Option<Duration>,
   last_poll: Instant,
   break_counter: u8,
+  state_change_callback: Option<Box<dyn FnMut(TimerState)>>,
 }
 
 fn minutes(duration: &Duration) -> u64 {
@@ -85,6 +88,7 @@ impl Timer {
       remaining_time: Some(TimerState::None.time()),
       last_poll: Instant::now(),
       break_counter: 0,
+      state_change_callback: None,
     }
   }
 
@@ -117,26 +121,21 @@ impl Timer {
     self.remaining_time = Some(self.state.time());
   }
 
+  fn on_state_change<F>(&mut self, callback: F)
+  where
+    F: FnMut(TimerState) + 'static,
+  {
+    self.state_change_callback = Some(Box::new(callback));
+  }
+
   fn poll(&mut self) {
     if self.running {
       if self.remaining_time.is_none() {
         self.begin_next_state();
-        Notification::new()
-          .summary("pomod: time is up")
-          .body(
-            format!(
-              "next up: {}",
-              match self.state {
-                TimerState::None => "none? how did this happen?",
-                TimerState::Pomodoro => "pomodoro",
-                TimerState::ShortBreak => "short break",
-                TimerState::LongBreak => "long break",
-              }
-            )
-            .as_str(),
-          )
-          .show()
-          .unwrap();
+        if self.state_change_callback.is_some() {
+          let callback = self.state_change_callback.as_mut().unwrap();
+          callback(self.state);
+        }
       } else {
         self.remaining_time = self
           .remaining_time
@@ -152,20 +151,52 @@ fn main() {
   let mut timer = Timer::new();
   let signal_trap = Trap::trap(&[Signal::SIGUSR1, Signal::SIGUSR2]);
 
+  {
+    use rodio::Source;
+
+    let device = rodio::default_output_device().unwrap();
+    let sound = Cursor::new(include_bytes!("sound.ogg").to_vec());
+
+    timer.on_state_change(move |new_state| {
+      Notification::new()
+        .summary("pomod: time is up")
+        .body(
+          format!(
+            "next up: {}",
+            match new_state {
+              TimerState::None => "none? how did this happen?",
+              TimerState::Pomodoro => "pomodoro",
+              TimerState::ShortBreak => "short break",
+              TimerState::LongBreak => "long break",
+            }
+          )
+          .as_str(),
+        )
+        .urgency(Urgency::Critical)
+        .show()
+        .unwrap();
+
+      let decoder = Decoder::new(sound.clone()).unwrap();
+      rodio::play_raw(&device, decoder.convert_samples());
+    });
+  }
+
   loop {
-    match signal_trap.wait(Instant::now() + Duration::from_millis(500)) {
-      Some(signal) => match signal {
+    if let Some(signal) =
+      signal_trap.wait(Instant::now() + Duration::from_millis(500))
+    {
+      match signal {
         Signal::SIGUSR1 => timer.toggle(),
         Signal::SIGUSR2 => timer = Timer::new(),
         any_other => panic!("got unknown signal: {:?}", any_other),
-      },
-      None => (),
+      }
     }
 
     timer.poll();
 
     let mut state_string = String::new();
-    let remaining_time = timer.remaining_time.unwrap_or(Duration::new(0, 0));
+    let remaining_time =
+      timer.remaining_time.unwrap_or_else(|| Duration::new(0, 0));
     state_string.push_str(&timer.state.pomicon());
     state_string.push_str(
       format!(
