@@ -7,11 +7,12 @@ import std/strformat
 import std/tables
 import std/times
 
+
 # edit to configure
 
 const
   # times are in seconds
-  PomodoroTime = 5
+  PomodoroTime = 25 * 60
   ShortBreakTime = 5 * 60
   LongBreakTime = 30 * 60
   BreakCycle = 4           # the amount of short breaks before a long break
@@ -25,9 +26,11 @@ const
 # implementation
 
 proc minutes(duration: Duration): int64 =
+  ## Get the amount of minutes in the duration.
   duration.inSeconds div 60
 
 proc seconds(duration: Duration): int64 =
+  ## Get the amount of seconds in the current minute.
   duration.inSeconds mod 60
 
 type
@@ -46,6 +49,7 @@ type
     stateChangeProc: proc (newState: TimerState)
 
 proc time(state: TimerState): Duration =
+  ## Returns the amount of time a given state should take (in seconds).
   let seconds =
     case state
     of tsNone, tsPomodoro: PomodoroTime
@@ -55,6 +59,7 @@ proc time(state: TimerState): Duration =
   result = initDuration(seconds = seconds)
 
 proc pomicon(state: TimerState): string =
+  ## Returns the Nerd Font/Pomicons icon associated with the given state.
   result =
     case state
     of tsNone: IconPlanned
@@ -75,18 +80,22 @@ proc next(state: var TimerState, breakCounter: var int) =
     breakCounter = (breakCounter + 1) mod BreakCycle
 
 proc initTimer(): Timer =
+  ## Initializes a new timer.
   result = Timer()
   result.remainingTime = result.state.time
   result.lastPoll = getMonoTime()
 
 proc onStateChange(timer: var Timer, callback: proc (newState: TimerState)) =
+  ## Sets the timer's state change callback.
   timer.stateChangeProc = callback
 
 proc nextState(timer: var Timer) =
+  ## Skips to the next state and sets the timer's remaining time accordingly.
   timer.state.next(timer.breakCounter)
   timer.remainingTime = timer.state.time
 
 proc start(timer: var Timer) =
+  ## Starts the timer.
   if not timer.running:
     if timer.stateStartTime.isNone:
       timer.stateStartTime = some(getMonoTime())
@@ -94,13 +103,17 @@ proc start(timer: var Timer) =
     timer.running = true
 
 proc stop(timer: var Timer) =
+  ## Stops the timer.
   timer.running = false
 
 proc toggle(timer: var Timer) =
+  ## Toggles the timer.
   if not timer.running: timer.start()
   else: timer.stop()
 
 proc poll(timer: var Timer) =
+  ## Polls the timer and updates its state. This must be called monotonically
+  ## (slight deviations are allowed).
   if timer.running:
     if timer.remainingTime.inSeconds <= 0:
       # time's up
