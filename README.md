@@ -29,10 +29,10 @@ Nerd Fonts recommended.
  - it's very minimal
  - it's made for use with nerd fonts
  - it has notifications for finished timespans
- - it doesn't have very many dependencies
+ - it has a nice, unobtrusive sound
+ - ~~it doesn't have very many dependencies~~ now it has, thanks rodio
 
 ### Cons
- - no sound
  - no configuration unless you edit the source code
  - default config requires nerd fonts
  - the timer's probably imprecise
