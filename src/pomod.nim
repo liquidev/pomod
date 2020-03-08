@@ -221,4 +221,4 @@ when isMainModule:
         icon = timer.state.pomicon
         minutes = timer.remainingTime.minutes
         seconds = timer.remainingTime.seconds
-      stdout.writeLine(fmt"{icon} {minutes:02}:{seconds:02}")
+      echo fmt"{icon} {minutes:02}:{seconds:02}"
